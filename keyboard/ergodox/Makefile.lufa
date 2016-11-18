@@ -38,6 +38,12 @@
 # To rebuild project do "make clean" then "make all".
 #----------------------------------------------------------------------------
 
+# Local vars
+KEYMAP = cub
+
+DEBUG_LEDS = yes
+OPT_DEFS += -DDEBUG_LEDS
+
 # Target file name (without extension).
 TARGET = ergodox_lufa
 

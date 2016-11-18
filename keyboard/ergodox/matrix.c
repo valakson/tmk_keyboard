@@ -29,9 +29,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "matrix.h"
 #include "ergodox.h"
 #include "i2cmaster.h"
-#ifdef DEBUG_MATRIX_SCAN_RATE
-#include  "timer.h"
-#endif
+#include "timer.h"
 
 #ifndef DEBOUNCE
 #   define DEBOUNCE	5
@@ -52,6 +50,11 @@ static uint8_t mcp23018_reset_loop;
 #ifdef DEBUG_MATRIX_SCAN_RATE
 uint32_t matrix_timer;
 uint32_t matrix_scan_count;
+#endif
+
+#ifdef DEBUG_LEDS
+uint32_t debug_leds_timer;
+uint8_t  debug_leds_phase;
 #endif
 
 inline
@@ -85,6 +88,11 @@ void matrix_init(void)
     matrix_timer = timer_read32();
     matrix_scan_count = 0;
 #endif
+
+#ifdef DEBUG_LEDS
+    debug_leds_timer = timer_read32();
+    debug_leds_phase = 0;
+#endif
 }
 
 uint8_t matrix_scan(void)
@@ -104,10 +112,10 @@ uint8_t matrix_scan(void)
         }
     }
 
+    uint32_t timer_now = timer_read32();
+
 #ifdef DEBUG_MATRIX_SCAN_RATE
     matrix_scan_count++;
-
-    uint32_t timer_now = timer_read32();
     if (TIMER_DIFF_32(timer_now, matrix_timer)>1000) {
         print("matrix scan frequency: ");
         pdec(matrix_scan_count);
@@ -118,13 +126,30 @@ uint8_t matrix_scan(void)
     }
 #endif
 
-#ifdef KEYMAP_CUB
+#ifdef DEBUG_LEDS
+    if (TIMER_DIFF_32(timer_now, debug_leds_timer)>1000) {
+        debug_leds_timer = timer_now;
+        debug_leds_phase = 1 - debug_leds_phase;
+        //debug_leds_phase = 1;
+
+        if (debug_leds_phase) {
+            ergodox_led_all_on();
+        } else {
+            ergodox_led_all_off();
+        }
+    }
+
+    mcp23018_status = ergodox_left_leds_update();
+#endif
+
+#ifdef EXTRA_LEDS
     uint8_t layer = biton32(layer_state);
 
     ergodox_board_led_off();
     ergodox_left_led_1_off();
     ergodox_left_led_2_off();
     ergodox_left_led_3_off();
+
     switch (layer) {
         case 1:
             // all
@@ -298,8 +323,8 @@ static void unselect_rows(void)
         // set all rows hi-Z : 1
         mcp23018_status = i2c_start(I2C_ADDR_WRITE);    if (mcp23018_status) goto out;
         mcp23018_status = i2c_write(GPIOA);             if (mcp23018_status) goto out;
-        mcp23018_status = i2c_write( 0xFF
-                              & ~(ergodox_left_led_3<<LEFT_LED_3_SHIFT)
+        mcp23018_status = i2c_write( 0x7F
+                              | (ergodox_left_led_3<<LEFT_LED_3_SHIFT)
                           );                            if (mcp23018_status) goto out;
     out:
         i2c_stop();
@@ -326,8 +351,8 @@ static void select_row(uint8_t row)
             // set other rows hi-Z : 1
             mcp23018_status = i2c_start(I2C_ADDR_WRITE);        if (mcp23018_status) goto out;
             mcp23018_status = i2c_write(GPIOA);                 if (mcp23018_status) goto out;
-            mcp23018_status = i2c_write( 0xFF & ~(1<<row)
-                                  & ~(ergodox_left_led_3<<LEFT_LED_3_SHIFT)
+            mcp23018_status = i2c_write( (0x7F & ~(1<<row))
+                                  | (ergodox_left_led_3<<LEFT_LED_3_SHIFT)
                               );                                if (mcp23018_status) goto out;
         out:
             i2c_stop();
