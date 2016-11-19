@@ -41,8 +41,8 @@
 # Local vars
 KEYMAP = cub
 
-DEBUG_LEDS = yes
-OPT_DEFS += -DDEBUG_LEDS
+# DEBUG_LEDS = yes
+# OPT_DEFS += -DDEBUG_LEDS
 
 # Target file name (without extension).
 TARGET = ergodox_lufa
