@@ -189,15 +189,15 @@ static const uint8_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
                 { } ( ) +
               ^ ! ?     =
               ' ! $ " ; \
-              # [ < > ] \
+              # [ < > ] \ 
         */
 
         // right hand
-             NO,  NO,  4,   5,   9,   0,   PPLS,
-             TRNS,MINS,2,   FN5, 9,   0,   EQL,
-                  BSLS,2,   P,   FN1, 1,   FN2,
-             TRNS,3,   6,   FN3, FN4, 7,   FN2,
-                       TRNS,TRNS,TRNS,TRNS,TRNS,
+             NO,  NO,  FN3,  FN4,   9,   0,   PPLS,
+	     TRNS,TRNS,MINS, EQL,   F,   0,   MINS,
+                  FN5, FN1,  FN2, RBRC,  FN6,   FN2,
+             TRNS,3,   FN3,  FN4, PPLS, PMNS, FN2,
+                       TRNS, TRNS,TRNS,TRNS,TRNS,
         TRNS,TRNS,
         TRNS,
         TRNS,TRNS,TRNS
@@ -426,11 +426,12 @@ static const uint16_t PROGMEM fn_actions[] = {
 };
 
 static const uint16_t PROGMEM fn_actions_4[] = {
-    [1]  =  ACTION_MODS_KEY(MOD_LSFT, KC_BSLS),             // FN1  = Shifted BackSlash // " in Workman
-    [2]  =  ACTION_MODS_KEY(MOD_LSFT, KC_MINS),             // FN2  = Shifted Minus     // \ in Workman
-    [3]  =  ACTION_MODS_KEY(MOD_LSFT, KC_COMM),             // FN3  = Shifted comma     // < in Workman
-    [4]  =  ACTION_MODS_KEY(MOD_LSFT, KC_DOT),              // FN4  = Shifted dot       // > in Workman
-    [5]  =  ACTION_MODS_KEY(MOD_LSFT, KC_SLSH),             // FN5  = Shifted slash     // ? in Workman
+    [1]  =  ACTION_MODS_KEY(MOD_LSFT, KC_9),             // FN1  = Shifted BackSlash // " in Workman
+    [2]  =  ACTION_MODS_KEY(MOD_LSFT, KC_0),             // FN2  = Shifted Minus     // \ in Workman
+    [3]  =  ACTION_MODS_KEY(MOD_LSFT, KC_W),             // FN3  = Shifted comma     // < in Workman
+    [4]  =  ACTION_MODS_KEY(MOD_LSFT, KC_E),             // FN4  = Shifted dot       // > in Workman
+    [5]  =  ACTION_MODS_KEY(MOD_LSFT, KC_Q),             // FN5  = Shifted slash     // ? in Workman
+    [6]  =  ACTION_MODS_KEY(MOD_LSFT, KC_7)
 };
 
 static const uint16_t PROGMEM fn_actions_7[] = {
