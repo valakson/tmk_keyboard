@@ -94,16 +94,14 @@ const USB_Descriptor_HIDReport_Datatype_t PROGMEM MouseReport[] =
 
             HID_RI_USAGE_PAGE(8, 0x09), /* Button */
             HID_RI_USAGE_MINIMUM(8, 0x01),  /* Button 1 */
-            HID_RI_USAGE_MAXIMUM(8, 0x05),  /* Button 5 */
+            HID_RI_USAGE_MAXIMUM(8, 0x08),  /* Button 8 */
             HID_RI_LOGICAL_MINIMUM(8, 0x00),
             HID_RI_LOGICAL_MAXIMUM(8, 0x01),
-            HID_RI_REPORT_COUNT(8, 0x05),
+            HID_RI_REPORT_COUNT(8, 0x08),
             HID_RI_REPORT_SIZE(8, 0x01),
             HID_RI_INPUT(8, HID_IOF_DATA | HID_IOF_VARIABLE | HID_IOF_ABSOLUTE),
-            HID_RI_REPORT_COUNT(8, 0x01),
-            HID_RI_REPORT_SIZE(8, 0x03),
-            HID_RI_INPUT(8, HID_IOF_CONSTANT),
 
+#ifndef MOUSE_EXT_REPORT
             HID_RI_USAGE_PAGE(8, 0x01), /* Generic Desktop */
             HID_RI_USAGE(8, 0x30), /* Usage X */
             HID_RI_USAGE(8, 0x31), /* Usage Y */
@@ -112,6 +110,25 @@ const USB_Descriptor_HIDReport_Datatype_t PROGMEM MouseReport[] =
             HID_RI_REPORT_COUNT(8, 0x02),
             HID_RI_REPORT_SIZE(8, 0x08),
             HID_RI_INPUT(8, HID_IOF_DATA | HID_IOF_VARIABLE | HID_IOF_RELATIVE),
+#else
+            /* Boot protocol XY ignored in Report protocol */
+            HID_RI_USAGE_PAGE(8, 0xff), /* Vendor */
+            HID_RI_USAGE(8, 0xff), /* Vendor  */
+            HID_RI_LOGICAL_MINIMUM(8, -127),
+            HID_RI_LOGICAL_MAXIMUM(8, 127),
+            HID_RI_REPORT_COUNT(8, 0x02),
+            HID_RI_REPORT_SIZE(8, 0x08),
+            HID_RI_INPUT(8, HID_IOF_DATA | HID_IOF_VARIABLE | HID_IOF_RELATIVE),
+
+            HID_RI_USAGE_PAGE(8, 0x01), /* Generic Desktop */
+            HID_RI_USAGE(8, 0x30), /* Usage X */
+            HID_RI_USAGE(8, 0x31), /* Usage Y */
+            HID_RI_LOGICAL_MINIMUM(16, -32767),
+            HID_RI_LOGICAL_MAXIMUM(16,  32767),
+            HID_RI_REPORT_COUNT(8, 0x02),
+            HID_RI_REPORT_SIZE(8, 16),
+            HID_RI_INPUT(8, HID_IOF_DATA | HID_IOF_VARIABLE | HID_IOF_RELATIVE),
+#endif
 
             HID_RI_USAGE(8, 0x38), /* Wheel */
             HID_RI_LOGICAL_MINIMUM(8, -127),

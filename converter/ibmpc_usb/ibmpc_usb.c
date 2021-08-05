@@ -50,6 +50,11 @@ static int16_t read_wait(uint16_t wait_ms)
     return code;
 }
 
+#define ID_STR(id)  (id == 0xFFFE ? "_????" : \
+                    (id == 0xFFFD ? "_Z150" : \
+                    (id == 0x0000 ? "_AT84" : \
+                     "")))
+
 static uint16_t read_keyboard_id(void)
 {
     uint16_t id = 0;
@@ -85,7 +90,6 @@ DONE:
 void hook_early_init(void)
 {
     ibmpc_host_init();
-    ibmpc_host_enable();
 }
 
 void matrix_init(void)
@@ -130,9 +134,18 @@ uint8_t matrix_scan(void)
     } state = INIT;
     static uint16_t init_time;
 
+#ifdef IBMPC_MOUSE_ENABLE
+    static enum {
+        MOUSE_DEFAULT  = 0, // Default three-button
+        MOUSE_INTELLI  = 3, // Intellimouse Explorer 3-button & wheel
+        MOUSE_EXPLORER = 4, // Intellimouse Explorer 5-button & wheel
+        MOUSE_LOGITECH = 9  // Logitech PS/2++
+    } mouse_id = MOUSE_DEFAULT;
+    static uint8_t mouse_btn = 0;
+#endif
 
     if (ibmpc_error) {
-        xprintf("\nERR:%02X ISR:%04X ", ibmpc_error, ibmpc_isr_debug);
+        xprintf("\n%u ERR:%02X ISR:%04X ", timer_read(), ibmpc_error, ibmpc_isr_debug);
 
         // when recv error, neither send error nor buffer full
         if (!(ibmpc_error & (IBMPC_ERR_SEND | IBMPC_ERR_FULL))) {
@@ -150,7 +163,7 @@ uint8_t matrix_scan(void)
 
     // check protocol change AT/XT
     if (ibmpc_protocol && ibmpc_protocol != current_protocol) {
-        xprintf("\nPRT:%02X ISR:%04X ", ibmpc_protocol, ibmpc_isr_debug);
+        xprintf("\n%u PRT:%02X ISR:%04X ", timer_read(), ibmpc_protocol, ibmpc_isr_debug);
 
         // protocol change between AT and XT indicates that
         // keyboard is hotswapped or something goes wrong.
@@ -169,8 +182,6 @@ uint8_t matrix_scan(void)
 
     switch (state) {
         case INIT:
-            ibmpc_host_disable();
-
             xprintf("I%u ", timer_read());
             keyboard_kind = NONE;
             keyboard_id = 0x0000;
@@ -181,19 +192,20 @@ uint8_t matrix_scan(void)
 
             init_time = timer_read();
             state = WAIT_SETTLE;
+            ibmpc_host_enable();
             break;
         case WAIT_SETTLE:
+            while (ibmpc_host_recv() != -1) ; // read data
+
             // wait for keyboard to settle after plugin
-            if (timer_elapsed(init_time) > 1000) {
+            if (timer_elapsed(init_time) > 3000) {
                 state = AT_RESET;
             }
             break;
         case AT_RESET:
-            ibmpc_host_isr_clear();
-            ibmpc_host_enable();
-            wait_ms(1); // keyboard can't respond to command without this
+            xprintf("A%u ", timer_read());
 
-            // SKIDATA-2-DE(and some other keyboards?) stores 'Code Set' setting in nonvlatile memory
+            // SKIDATA-2-DE(and some other keyboards?) stores 'Code Set' setting in nonvolatile memory
             // and keeps it until receiving reset. Sending reset here may be useful to clear it, perhaps.
             // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#select-alternate-scan-codesf0
 
@@ -203,7 +215,6 @@ uint8_t matrix_scan(void)
             } else {
                 state = XT_RESET;
             }
-            xprintf("A%u ", timer_read());
             break;
         case XT_RESET:
             // Reset XT-initialize keyboard
@@ -281,15 +292,15 @@ uint8_t matrix_scan(void)
             } else if (0xFFFE == keyboard_id) {     // CodeSet2 PS/2 fails to response?
                 keyboard_kind = PC_AT;
             } else if (0xFFFD == keyboard_id) {     // Zenith Z-150 AT
-                keyboard_kind = PC_AT_Z150;
+                keyboard_kind = PC_AT;
             } else if (0x00FF == keyboard_id) {     // Mouse is not supported
-                xprintf("Mouse: not supported\n");
-                keyboard_kind = NONE;
-#ifdef G80_2551_SUPPORT
-            } else if (0xAB86 == keyboard_id ||
-                       0xAB85 == keyboard_id) {     // For G80-2551 and other 122-key terminal
-                // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ab86
+                keyboard_kind = PC_MOUSE;
+            } else if (0xAB85 == keyboard_id || // IBM 122-key Model M, NCD N-97
+                       0xAB86 == keyboard_id || // Cherry G80-2551, IBM 1397000
+                       0xAB92 == keyboard_id) { // IBM 5576-001
                 // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ab85
+                // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ab86
+                // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ab92
 
                 if ((0xFA == ibmpc_host_send(0xF0)) &&
                     (0xFA == ibmpc_host_send(0x03))) {
@@ -298,7 +309,21 @@ uint8_t matrix_scan(void)
                 } else {
                     keyboard_kind = PC_AT;
                 }
-#endif
+            } else if (0xAB90 == keyboard_id || // IBM 5576-002
+                       0xAB91 == keyboard_id) { // IBM 5576-003
+                // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ab90
+                // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ab91
+
+                xprintf("\n5576_CS82h:");
+                if ((0xFA == ibmpc_host_send(0xF0)) &&
+                    (0xFA == ibmpc_host_send(0x82))) {
+                    // switch to code set 82h
+                    // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ibm-5576-scan-codes-set
+                    xprintf("OK ");
+                } else {
+                    xprintf("NG ");
+                }
+                keyboard_kind = PC_AT;
             } else if (0xBFB0 == keyboard_id) {     // IBM RT Keyboard
                 // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#bfb0
                 // TODO: LED indicator fix
@@ -308,11 +333,24 @@ uint8_t matrix_scan(void)
                 keyboard_kind = PC_AT;
             } else if (0xBF00 == (keyboard_id & 0xFF00)) {  // CodeSet3 Terminal
                 keyboard_kind = PC_TERMINAL;
+            } else if (0x7F00 == (keyboard_id & 0xFF00)) {  // CodeSet3 Terminal 1394204
+                keyboard_kind = PC_TERMINAL;
             } else {
-                keyboard_kind = PC_AT;
+                xprintf("\nUnknown ID: Report to TMK ");
+                if ((0xFA == ibmpc_host_send(0xF0)) &&
+                    (0xFA == ibmpc_host_send(0x02))) {
+                    // switch to code set 2
+                    keyboard_kind = PC_AT;
+                } else if ((0xFA == ibmpc_host_send(0xF0)) &&
+                           (0xFA == ibmpc_host_send(0x03))) {
+                    // switch to code set 3
+                    keyboard_kind = PC_TERMINAL;
+                } else {
+                    keyboard_kind = PC_AT;
+                }
             }
 
-            xprintf("\nID:%04X(%s) ", keyboard_id, KEYBOARD_KIND_STR(keyboard_kind));
+            xprintf("\nID:%04X(%s%s) ", keyboard_id, KEYBOARD_KIND_STR(keyboard_kind), ID_STR(keyboard_id));
 
             state = SETUP;
             break;
@@ -324,15 +362,89 @@ uint8_t matrix_scan(void)
                 case PC_AT:
                     led_set(host_keyboard_leds());
                     break;
-                case PC_AT_Z150:
-                    // TODO: do not set indicators temporarily for debug
-                    break;
                 case PC_TERMINAL:
                     // Set all keys to make/break type
                     ibmpc_host_send(0xF8);
                     // This should not be harmful
                     led_set(host_keyboard_leds());
                     break;
+#ifdef IBMPC_MOUSE_ENABLE
+                case PC_MOUSE: {
+                    uint8_t s[3];
+                    void read_status(void) {
+                        ibmpc_host_send(0xE9);
+                        s[0] = ibmpc_host_recv_response();
+                        s[1] = ibmpc_host_recv_response();
+                        s[2] = ibmpc_host_recv_response();
+                        xprintf("S[%02X %02X %02X] ", s[0], s[1], s[2]);
+                    }
+
+                    ibmpc_host_send(0xF5);  // Disable
+                    ibmpc_host_send(0xEA);  // Set Stream Mode
+                    read_status();
+
+                    // Logitech Magic Status
+                    // https://github.com/torvalds/linux/blob/master/drivers/input/mouse/logips2pp.c#L352
+                    xprintf("\nLMS: ");
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x00);
+                    ibmpc_host_send(0xE6); ibmpc_host_send(0xE6); ibmpc_host_send(0xE6);
+                    read_status();
+                    if (s[0] == 0 || s[1] == 0) {
+                        // Not Logitech
+                        goto MOUSE_INTELLI;
+                    }
+
+                    // Logitech Magic Knock
+                    // https://www.win.tue.nl/~aeb/linux/kbd/scancodes-13.html
+                    // https://web.archive.org/web/20030714000535/www.dqcs.com/logitech/ps2ppspec.htm
+                    // https://github.com/torvalds/linux/blob/5bfc75d92efd494db37f5c4c173d3639d4772966/drivers/input/serio/libps2.c#L347
+                    xprintf("\nLOG: ");
+                    // sliced magic byte: 0x39
+                    ibmpc_host_send(0xE6);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x00);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x03);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x02);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x01);
+                    // sliced magic byte: 0xDB
+                    ibmpc_host_send(0xE6);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x03);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x01);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x02);
+                    ibmpc_host_send(0xE8); ibmpc_host_send(0x03);
+                    mouse_id = MOUSE_LOGITECH;  // 9
+                    goto MOUSE_DONE;
+
+MOUSE_INTELLI:
+                    // Intellimouse protocol: 3
+                    xprintf("\nINT: ");
+                    ibmpc_host_send(0xF3); ibmpc_host_send(0xC8);
+                    ibmpc_host_send(0xF3); ibmpc_host_send(0x64);
+                    ibmpc_host_send(0xF3); ibmpc_host_send(0x50);
+                    mouse_id = read_keyboard_id() >> 8;
+
+                    // Intellimouse Explorer protocol: 4
+                    xprintf("\nEXP: ");
+                    ibmpc_host_send(0xF3); ibmpc_host_send(0xC8);
+                    ibmpc_host_send(0xF3); ibmpc_host_send(0xC8);
+                    ibmpc_host_send(0xF3); ibmpc_host_send(0x50);
+                    mouse_id = read_keyboard_id() >> 8;
+
+                    // Not Intellimouse
+                    if (mouse_id == 0) {
+                        xprintf("\nDEF: ");
+                        ibmpc_host_send(0xF6);  // Set Default
+                    }
+
+MOUSE_DONE:
+                    //ibmpc_host_send(0xEA);  // Set Stream Mode
+                    ibmpc_host_send(0xF4);  // Enable
+                    read_status();
+                    xprintf("\nMouse: %s\n", ((mouse_id == MOUSE_LOGITECH) ? "LOGITECH" :
+                                             ((mouse_id == MOUSE_INTELLI)  ? "INTELLI" :
+                                             ((mouse_id == MOUSE_EXPLORER) ? "EXPLORER" :
+                                             ((mouse_id == MOUSE_DEFAULT)  ? "DEFAULT" : "???")))));
+                    break; }
+#endif
                 default:
                     break;
             }
@@ -350,12 +462,12 @@ uint8_t matrix_scan(void)
                 // Scan Code Set 1: 0xFF
                 // Scan Code Set 2 and 3: 0x00
                 // Buffer full(IBMPC_ERR_FULL): 0xFF
-                if (code == 0x00 || code == 0xFF) {
+                if (keyboard_kind != PC_MOUSE && (code == 0x00 || code == 0xFF)) {
                     // clear stuck keys
                     matrix_clear();
                     clear_keyboard();
 
-                    xprintf("\n[OVR] ");
+                    xprintf("\n[CLR] ");
                     break;
                 }
 
@@ -364,12 +476,118 @@ uint8_t matrix_scan(void)
                         if (process_cs1(code) == -1) state = INIT;
                         break;
                     case PC_AT:
-                    case PC_AT_Z150:
                         if (process_cs2(code) == -1) state = INIT;
                         break;
                     case PC_TERMINAL:
                         if (process_cs3(code) == -1) state = INIT;
                         break;
+#ifdef IBMPC_MOUSE_ENABLE
+                    case PC_MOUSE: {
+                        // Logitec Mouse Data:
+                        // https://github.com/torvalds/linux/blob/d2912cb15bdda8ba4a5dd73396ad62641af2f520/drivers/input/mouse/logips2pp.c#L41
+                        // Intellimouse Data:
+                        // https://www.win.tue.nl/~aeb/linux/kbd/scancodes-13.html
+                        int16_t b0, b1, b2, b3;
+                        int16_t x = 0, y = 0;
+                        int8_t  v = 0, h = 0;
+
+                        b0 = code;
+                        b1 = ibmpc_host_recv_response();
+                        if (b1 == -1) break;
+                        b2 = ibmpc_host_recv_response();
+                        if (b2 == -1) break;
+
+                        switch (mouse_id) {
+                            case MOUSE_DEFAULT:
+                            case MOUSE_INTELLI:
+                            case MOUSE_EXPLORER:
+                                mouse_btn = (mouse_btn & 0xF8) | (b0 & 0x07);
+                                x = (b0 & 0x10) ? (b1 | 0xFF00) : b1;
+                                y = (b0 & 0x20) ? (b2 | 0xFF00) : b2;
+                                break;
+                            case MOUSE_LOGITECH:
+                                if ((b0 & 0x48) == 0x48 && (b1 & 0x02) == 0x02) {
+                                    switch (((b0 & 0x30) >> 2) | ((b1 & 0x30) >> 4)) {
+                                        case 1: // C8 Dx xx
+                                            // Ignored while Scroll-Up/Down is pressed
+                                            if (!(b2 & 0x40)) {
+                                                if (b2 & 0x80)
+                                                    h = ((b2 & 0x08) ? 0xF0 : 0x00) | (b2 & 0x0F);
+                                                else
+                                                    v = ((b2 & 0x08) ? 0xF0 : 0x00) | (b2 & 0x0F);
+                                            }
+                                            // Back
+                                            if (b2 & 0x10) mouse_btn |= (1 << 3); else mouse_btn &= ~(1 << 3);
+                                            // Forward
+                                            if (b2 & 0x20) mouse_btn |= (1 << 4); else mouse_btn &= ~(1 << 4);
+                                            break;
+                                        case 2: // C8 Ex xx
+                                            if (b2 & 0x01) mouse_btn |= (1 << 6); else mouse_btn &= ~(1 << 6);
+                                            if (b2 & 0x02) mouse_btn |= (1 << 7); else mouse_btn &= ~(1 << 7);
+                                            // Task
+                                            if (b2 & 0x04) mouse_btn |= (1 << 5); else mouse_btn &= ~(1 << 5);
+                                            // Scroll-Up
+                                            if (b2 & 0x08) mouse_btn |= (1 << 6); else mouse_btn &= ~(1 << 6);
+                                            // Scroll-Down
+                                            if (b2 & 0x10) mouse_btn |= (1 << 7); else mouse_btn &= ~(1 << 7);
+                                            break;
+                                        case 3: // TouchPad?
+                                            if (b2 & 0x80)
+                                                h = ((b2 & 0x80) ? 0xF0 : 0x00) | ((b2 >> 4) & 0x0F);
+                                            else
+                                                v = ((b2 & 0x80) ? 0xF0 : 0x00) | ((b2 >> 4) & 0x0F);
+
+                                            mouse_btn = (mouse_btn & 0xF8) | (b2 & 0x07);
+                                            break;
+                                    }
+                                } else {
+                                    mouse_btn = (mouse_btn & 0xF8) | (b0 & 0x07);
+                                    x = (b0 & 0x10) ? (b1 | 0xFF00) : b1;
+                                    y = (b0 & 0x20) ? (b2 | 0xFF00) : b2;
+                                }
+                                break;
+                        }
+
+                        // Extra byte
+                        switch (mouse_id) {
+                            case MOUSE_INTELLI:
+                                b3 = ibmpc_host_recv_response();
+                                if (b3 == -1) break;
+                                v = b3 & 0xFF;
+                                break;
+                            case MOUSE_EXPLORER:
+                                b3 = ibmpc_host_recv_response();
+                                if (b3 == -1) break;
+                                // sign extension
+                                v = ((b3 & 0x08) ? 0xF0 : 0x00) | (b3 & 0x0F);
+
+                                // Back/Forward
+                                if (b3 & 0x10) mouse_btn |= (1 << 3); else mouse_btn &= ~(1 << 3);
+                                if (b3 & 0x20) mouse_btn |= (1 << 4); else mouse_btn &= ~(1 << 4);
+                                break;
+                            default:
+				break;
+                        }
+
+
+                        // chop to 8-bit
+                        #define CHOP8(a)    (((a) > 127) ? 127 : (((a) < -127) ? -127 : (a)))
+                        report_mouse_t mouse_report = {};
+                        mouse_report.buttons = mouse_btn;
+                        #ifdef MOUSE_EXT_REPORT
+                        mouse_report.x =  x;
+                        mouse_report.y = -y;
+                        #else
+                        mouse_report.x =  CHOP8(x);
+                        mouse_report.y = -CHOP8(y);
+                        #endif
+                        mouse_report.v = -CHOP8(v);
+                        mouse_report.h =  CHOP8(h);
+                        host_mouse_send(&mouse_report);
+                        xprintf("M[x:%d y:%d v:%d h:%d b:%02X]\n", mouse_report.x, mouse_report.y,
+                                mouse_report.v, mouse_report.h, mouse_report.buttons);
+                        break; }
+#endif
                     default:
                         break;
                 }
@@ -432,6 +650,7 @@ void led_set(uint8_t usb_led)
     // XT keyobard doesn't support any command and it is harmful perhaps
     // https://github.com/tmk/tmk_keyboard/issues/635#issuecomment-626993437
     if (keyboard_kind == PC_XT) return;
+    if (keyboard_kind == PC_MOUSE) return;
 
     // It should be safe to send the command to keyboards with AT protocol
     // - IBM Terminal doesn't support the command and response with 0xFE but it is not harmful.
@@ -736,6 +955,30 @@ static uint8_t cs2_e0code(uint8_t code) {
     }
 }
 
+// IBM 5576-002/003 Scan code translation
+// https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ibm-5576-code-set-82h
+static uint8_t translate_5576_cs2(uint8_t code) {
+    switch (code) {
+        case 0x11: return 0x0F; // Zenmen   -> RALT
+        case 0x13: return 0x11; // Kanji    -> LALT
+        case 0x0E: return 0x54; // @
+        case 0x54: return 0x5B; // [
+        case 0x5B: return 0x5D; // ]
+        case 0x5C: return 0x6A; // JYEN
+        case 0x5D: return 0x6A; // JYEN
+        case 0x62: return 0x0E; // Han/Zen  -> `~
+        case 0x7C: return 0x77; // Keypad *
+    }
+    return code;
+}
+static uint8_t translate_5576_cs2_e0(uint8_t code) {
+    switch (code) {
+        case 0x11: return 0x13; // Hiragana -> KANA
+        case 0x41: return 0x7C; // Keypad '
+    }
+    return code;
+}
+
 static int8_t process_cs2(uint8_t code)
 {
     // scan code reading states
@@ -754,6 +997,9 @@ static int8_t process_cs2(uint8_t code)
 
     switch (state) {
         case INIT:
+            if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id) {
+                code = translate_5576_cs2(code);
+            }
             switch (code) {
                 case 0xE0:
                     state = E0;
@@ -787,6 +1033,9 @@ static int8_t process_cs2(uint8_t code)
             }
             break;
         case E0:    // E0-Prefixed
+            if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id) {
+                code = translate_5576_cs2_e0(code);
+            }
             switch (code) {
                 case 0x12:  // to be ignored
                 case 0x59:  // to be ignored
@@ -807,6 +1056,9 @@ static int8_t process_cs2(uint8_t code)
             }
             break;
         case F0:    // Break code
+            if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id) {
+                code = translate_5576_cs2(code);
+            }
             switch (code) {
                 case 0x83:  // F7
                     matrix_break(0x02);
@@ -828,6 +1080,9 @@ static int8_t process_cs2(uint8_t code)
             }
             break;
         case E0_F0: // Break code of E0-prefixed
+            if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id) {
+                code = translate_5576_cs2_e0(code);
+            }
             switch (code) {
                 case 0x12:  // to be ignored
                 case 0x59:  // to be ignored
@@ -902,12 +1157,26 @@ static int8_t process_cs2(uint8_t code)
     return 0;
 }
 
+
 /*
  * Terminal: Scan Code Set 3
  *
  * See [3], [7] and
  * https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#scan-code-set-3
  */
+// IBM 5576-001 Scan code translation
+// https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-AT-Keyboard-Protocol#ibm-5576-code-set-3
+static uint8_t translate_5576_cs3(uint8_t code) {
+    switch (code) {
+        // Fix positon of keys to fit 122-key layout
+        case 0x13: return 0x5D; // JYEN
+        case 0x5C: return 0x51; // RO
+        case 0x76: return 0x7E; // Keypad '
+        case 0x7E: return 0x76; // Keypad Dup
+    }
+    return code;
+}
+
 static int8_t process_cs3(uint8_t code)
 {
     static enum {
@@ -920,8 +1189,21 @@ static int8_t process_cs3(uint8_t code)
 #endif
     } state = READY;
 
+    switch (code) {
+        case 0xAA:  // BAT code
+        case 0xFC:  // BAT code
+        case 0xBF:  // Part of keyboard ID
+        case 0xAB:  // Part keyboard ID
+            state = READY;
+            xprintf("!CS3_RESET!\n");
+            return -1;
+    }
+
     switch (state) {
         case READY:
+            if (0xAB92 == keyboard_id) {
+                code = translate_5576_cs3(code);
+            }
             switch (code) {
                 case 0xF0:
                     state = F0;
@@ -933,10 +1215,10 @@ static int8_t process_cs3(uint8_t code)
                     matrix_make(0x7F);
                     break;
                 case 0x85:  // Muhenkan
-                    matrix_make(0x0B);
+                    matrix_make(0x68);
                     break;
                 case 0x86:  // Henkan
-                    matrix_make(0x06);
+                    matrix_make(0x78);
                     break;
                 case 0x87:  // Hiragana
                     matrix_make(0x00);
@@ -960,51 +1242,44 @@ static int8_t process_cs3(uint8_t code)
                         matrix_make(code);
                     } else {
                         xprintf("!CS3_READY!\n");
-                        return -1;
                     }
             }
             break;
         case F0:    // Break code
+            state = READY;
+            if (0xAB92 == keyboard_id) {
+                code = translate_5576_cs3(code);
+            }
             switch (code) {
                 case 0x83:  // PrintScreen
                     matrix_break(0x02);
-                    state = READY;
                     break;
                 case 0x84:  // Keypad *
                     matrix_break(0x7F);
-                    state = READY;
                     break;
                 case 0x85:  // Muhenkan
-                    matrix_break(0x0B);
-                    state = READY;
+                    matrix_break(0x68);
                     break;
                 case 0x86:  // Henkan
-                    matrix_break(0x06);
-                    state = READY;
+                    matrix_break(0x78);
                     break;
                 case 0x87:  // Hiragana
                     matrix_break(0x00);
-                    state = READY;
                     break;
                 case 0x8B:  // Left GUI
                     matrix_break(0x01);
-                    state = READY;
                     break;
                 case 0x8C:  // Right GUI
                     matrix_break(0x09);
-                    state = READY;
                     break;
                 case 0x8D:  // Application
                     matrix_break(0x0A);
-                    state = READY;
                     break;
                 default:
-                    state = READY;
                     if (code < 0x80) {
                         matrix_break(code);
                     } else {
                         xprintf("!CS3_F0!\n");
-                        return -1;
                     }
             }
             break;
