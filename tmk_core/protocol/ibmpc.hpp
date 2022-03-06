@@ -75,11 +75,11 @@ POSSIBILITY OF SUCH DAMAGE.
 #define IBMPC_PROTOCOL_XT       0x20
 #define IBMPC_PROTOCOL_XT_IBM   0x21
 #define IBMPC_PROTOCOL_XT_CLONE 0x22
-#define IBMPC_PROTOCOL_XT_ERROR 0x23
 
 // Error numbers
 #define IBMPC_ERR_NONE        0
-#define IBMPC_ERR_RECV        0x00
+#define IBMPC_ERR_PARITY      0x01
+#define IBMPC_ERR_PARITY_AA   0x02
 #define IBMPC_ERR_SEND        0x10
 #define IBMPC_ERR_TIMEOUT     0x20
 #define IBMPC_ERR_FULL        0x40
@@ -118,7 +118,7 @@ class IBMPC
             clock_mask(1 << clock), data_mask(1 << data) {
     };
 
-    inline void isr(void) __attribute__((__always_inline__));
+    void isr(void);
 
 
     private:

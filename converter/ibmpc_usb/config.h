@@ -21,11 +21,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <avr/interrupt.h>
 
 #define VENDOR_ID       0xFEED
-#define PRODUCT_ID      0x1bee
-#define DEVICE_VER      0x0001
-#define MANUFACTURER    t.m.k.
+#define PRODUCT_ID      0x1BEE
+#define DEVICE_VER      0x0201
+#define MANUFACTURER    TMK
 #define PRODUCT         IBM PC keyboard converter
-#define DESCRIPTION     convert IBM PC keyboard to USB
 
 
 /* matrix size */
@@ -39,11 +38,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
     keyboard_report->mods == (MOD_BIT(KC_LALT) | MOD_BIT(KC_RALT)) \
 )
 
+
+// CS2 80-prefixed codes support
+#define CS2_80CODE_SUPPORT
+
 // G80-2551 terminal keyboard support
 #define G80_2551_SUPPORT
-
-// PS/2 Mouse support
-//#define IBMPC_MOUSE_ENABLE
 
 // Mouse Extended Report
 //#define MOUSE_EXT_REPORT

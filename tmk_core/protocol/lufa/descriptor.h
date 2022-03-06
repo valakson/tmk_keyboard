@@ -71,7 +71,7 @@ typedef struct
     USB_Descriptor_Interface_t            Console_Interface;
     USB_HID_Descriptor_HID_t              Console_HID;
     USB_Descriptor_Endpoint_t             Console_INEndpoint;
-    USB_Descriptor_Endpoint_t             Console_OUTEndpoint;
+//    USB_Descriptor_Endpoint_t             Console_OUTEndpoint;
 #endif
 
 #if !defined(NO_KEYBOARD) && defined(NKRO_6KRO_ENABLE)
@@ -127,8 +127,14 @@ typedef struct
 #endif
 
 #ifdef CONSOLE_ENABLE
-#   define CONSOLE_IN_EPNUM         (MOUSE_IN_EPNUM + 1)
-#   define CONSOLE_OUT_EPNUM        (MOUSE_IN_EPNUM + 1)
+    // ATMega32U2 doesn't support double bank on endpoint 1 and 2, use 3 or 4
+#   if MOUSE_IN_EPNUM < 2
+#       define CONSOLE_IN_EPNUM     3
+#       define CONSOLE_OUT_EPNUM    3
+#   else
+#       define CONSOLE_IN_EPNUM     (MOUSE_IN_EPNUM + 1)
+#       define CONSOLE_OUT_EPNUM    (MOUSE_IN_EPNUM + 1)
+#   endif
 #else
 #   define CONSOLE_OUT_EPNUM        MOUSE_IN_EPNUM
 #endif
@@ -153,7 +159,7 @@ typedef struct
 #define MOUSE_EPSIZE                8
 #endif
 
-#define CONSOLE_EPSIZE              32
+#define CONSOLE_EPSIZE              64
 #define NKRO_EPSIZE                 32
 
 
