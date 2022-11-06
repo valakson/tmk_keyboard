@@ -178,12 +178,18 @@ uint8_t IBMPCConverter::process_interface(void)
     if (ibmpc.error) {
         xprintf("\n%u ERR:%02X ISR:%04X ", timer_read(), ibmpc.error, ibmpc.isr_debug);
 
+        /* Error handling:
+         * IBMPC_ERR_PARITY         Reinit
+         * IBMPC_ERR_PARITY_AA      AT/XT Auto-Switching
+         * IBMPC_ERR_SEND           Ignore
+         * IBMPC_ERR_TIMEOUT        Reinit
+         * IBMPC_ERR_FULL           Ignore
+         * IBMPC_ERR_ILLEGAL        Reinit
+         * IBMPC_ERR_FF             Ignore(not used)
+         */
         // when recv error, neither send error nor buffer full
         if (!(ibmpc.error & (IBMPC_ERR_SEND | IBMPC_ERR_FULL))) {
-            if (state == LOOP) {
-                // Reset
-                state = ERROR;
-            }
+            state = ERROR;
             if (ibmpc.error == IBMPC_ERR_PARITY_AA) {
                 // AT/XT Auto-Switching support
                 // https://github.com/tmk/tmk_keyboard/wiki/IBM-PC-Keyboard-Converter#atxt-auto-switching
@@ -219,6 +225,7 @@ uint8_t IBMPCConverter::process_interface(void)
         case INIT:
             xprintf("I%u ", timer_read());
             init_time = timer_read();
+            ibmpc.host_isr_clear();
             ibmpc.host_enable();
             state = WAIT_SETTLE;
             break;
@@ -873,8 +880,16 @@ int8_t IBMPCConverter::process_cs1(uint8_t code)
  */
 uint8_t IBMPCConverter::cs2_e0code(uint8_t code) {
     switch(code) {
-        // E0 prefixed codes translation See [a].
-        case 0x11: return 0x0F; // right alt
+        case 0x11:  if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id)
+                        return 0x13; // Hiragana(5576) -> KANA
+                    else
+                        return 0x0F; // right alt
+
+        case 0x41:  if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id)
+                        return 0x7C; // Keypad ,(5576) -> Keypad *
+                    else
+                        return (code & 0x7F);
+
         case 0x14: return 0x19; // right control
         case 0x1F: return 0x17; // left GUI
         case 0x27: return 0x1F; // right GUI
@@ -975,13 +990,6 @@ uint8_t IBMPCConverter::translate_5576_cs2(uint8_t code) {
     }
     return code;
 }
-uint8_t IBMPCConverter::translate_5576_cs2_e0(uint8_t code) {
-    switch (code) {
-        case 0x11: return 0x13; // Hiragana -> KANA
-        case 0x41: return 0x7C; // Keypad , -> Keypad *
-    }
-    return code;
-}
 
 int8_t IBMPCConverter::process_cs2(uint8_t code)
 {
@@ -1028,9 +1036,6 @@ int8_t IBMPCConverter::process_cs2(uint8_t code)
             }
             break;
         case CS2_E0:    // E0-Prefixed
-            if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id) {
-                code = translate_5576_cs2_e0(code);
-            }
             switch (code) {
                 case 0x12:  // to be ignored
                 case 0x59:  // to be ignored
@@ -1075,9 +1080,6 @@ int8_t IBMPCConverter::process_cs2(uint8_t code)
             }
             break;
         case CS2_E0_F0: // Break code of E0-prefixed
-            if (0xAB90 == keyboard_id || 0xAB91 == keyboard_id) {
-                code = translate_5576_cs2_e0(code);
-            }
             switch (code) {
                 case 0x12:  // to be ignored
                 case 0x59:  // to be ignored
