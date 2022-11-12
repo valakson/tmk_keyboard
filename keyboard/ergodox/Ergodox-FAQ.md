@@ -42,11 +42,11 @@ https://github.com/cub-uanic/tmk_keyboard/tree/master
 
     # use one of these
     make -f Makefile.lufa
-    make -f Makefile.lufa dvorak
-    make -f Makefile.lufa colemak
-    make -f Makefile.lufa workman
-    make -f Makefile.lufa micro
-    make -f Makefile.lufa cub
+    make -f Makefile.lufa KEYMAP=dvorak
+    make -f Makefile.lufa KEYMAP=colemak
+    make -f Makefile.lufa KEYMAP=workman
+    make -f Makefile.lufa KEYMAP=micro
+    make -f Makefile.lufa KEYMAP=cub
 
 
 # Layouts
