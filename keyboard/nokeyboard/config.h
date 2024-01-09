@@ -20,21 +20,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 #define VENDOR_ID       0xFEED
-#define PRODUCT_ID      0x005B
-#define DEVICE_VER      0x0815
+#define PRODUCT_ID      0xEEEE
+#define DEVICE_VER      0x0000
 #define MANUFACTURER    TMK
-#define PRODUCT         USB to USB keyboard converter
-
-
-#define DESCRIPTION     Product from t.m.k. keyboard firmware project
+#define PRODUCT         nokeyboard
+#define DESCRIPTION     Product from TMK keyboard firmware project
 
 
 /* matrix size */
-#define MATRIX_ROWS 16
-#define MATRIX_COLS 16
+#define MATRIX_ROWS 0
+#define MATRIX_COLS 0
 
 /* key combination for command */
-#define IS_COMMAND() (keyboard_report->mods == (MOD_BIT(KC_LSHIFT) | MOD_BIT(KC_RSHIFT))) 
+#define IS_COMMAND() (keyboard_report->mods == (MOD_BIT(KC_LSHIFT) | MOD_BIT(KC_RSHIFT)))
 
 
 // Disable power saving in USB suspend loop but remote wakeup is still valid.
@@ -48,12 +46,5 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 // Disable USB suspend loop, which blocks UHS2 Task() while power saving.
 // Note that this also disables power saving and remote wakeup from keyboard completely.
 //#define NO_USB_SUSPEND_LOOP
-
-/* Mechanical locking support. */
-#define LOCKING_SUPPORT_ENABLE
-#define LOCKING_RESYNC_ENABLE
-
-// power saving during suspended without remote wakeup disabled
-#define UHS2_POWER_SAVING
 
 #endif
